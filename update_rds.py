@@ -21,7 +21,9 @@ AWS_DEFAULT_REGION = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
 
 # TODO: SELECT from database all rows with image/ avatars
 def select_legacy_images_from_db(connection, path):
-    query = f"SELECT id,path FROM avatars WHERE path LIKE '%{path}%' ORDER BY id ASC"
+    cursor = None
+    rows = []
+    query = f"SELECT id,path FROM avatars WHERE path LIKE '{path}%' ORDER BY id ASC"
 
     try:
         cursor = connection.cursor()
@@ -31,6 +33,8 @@ def select_legacy_images_from_db(connection, path):
         logging.error(f"Error inserting to the database: {error}")
         sys.exit(1)
     finally:
+        if cursor:
+            cursor.close()
         return rows
 
 
@@ -51,8 +55,24 @@ def copy_objects_between_buckets(source_bucket, destination_bucket, source_list,
 
 
 # TODO: Update DB with links from production-s3
-def update_image_path_in_database(path, path_id):
-    pass
+def update_image_path_in_database(connection, source_list, new_path):
+    cursor = None
+    query = "UPDATE avatars SET path = %s WHERE id = %s"
+
+    try:
+        for obj in source_list:
+            path = new_path + obj[1].split("/")[-1]
+            path_id = obj[0]
+            fields = (path, path_id)
+
+            cursor = connection.cursor()
+            cursor.execute(query, fields)
+            connection.commit()
+    except (Exception, psycopg2.DatabaseError) as error:
+        logging.error(f"Error inserting to the database: {error}")
+        sys.exit(1)
+    finally:
+        cursor.close()
 
 
 # TODO: check DB against image/ avatars and if not, remove images from legacy-s3
@@ -69,5 +89,6 @@ if __name__ == '__main__':
 
     data = select_legacy_images_from_db(conn, 'image/')
     copy_objects_between_buckets(S3_LEGACY_BUCKET_NAME, S3_PRODUCTION_BUCKET_NAME, data, 'avatar/')
+    update_image_path_in_database(conn, data, 'image/')
 
     conn.close()
