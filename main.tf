@@ -37,7 +37,7 @@ resource "aws_security_group" "rds_security_group" {
     to_port = 5432
     protocol = "tcp"
     cidr_blocks = [
-      "31.135.174.222/32"]
+      "1.1.1.1/32"]
   }
 
   egress {
